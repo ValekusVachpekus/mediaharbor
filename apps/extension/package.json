@@ -1,0 +1,6 @@
+{
+  "name": "@mediaharbor/extension", "private": true, "version": "0.1.0", "type": "module",
+  "scripts": { "dev": "wxt", "build": "wxt build --mv3", "build:firefox": "wxt build -b firefox --mv3", "check": "wxt prepare && tsc --noEmit -p tsconfig.json", "zip": "wxt zip --mv3", "zip:firefox": "wxt zip -b firefox --mv3" },
+  "dependencies": { "@mediaharbor/shared": "0.1.0", "react": "19.3.1", "react-dom": "19.3.1" },
+  "devDependencies": { "wxt": "0.21.5", "@wxt-dev/module-react": "^1.1.0" }
+}

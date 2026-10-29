@@ -1,0 +1,6 @@
+{
+  "name": "@mediaharbor/desktop", "private": true, "version": "0.1.0", "type": "module",
+  "scripts": { "dev": "vite --host 127.0.0.1 --port 1420", "build": "vite build", "tauri": "tauri" },
+  "dependencies": { "react": "19.3.1", "react-dom": "19.3.1", "@mediaharbor/shared": "0.1.0" },
+  "devDependencies": { "vite": "6.4.5", "@tauri-apps/cli": "^2.0.0" }
+}

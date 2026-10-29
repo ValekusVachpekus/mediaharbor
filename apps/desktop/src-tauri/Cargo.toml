@@ -1,0 +1,15 @@
+[package]
+name = "mediaharbor-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+mediaharbor-core = { path = "../../../crates/core" }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+rfd = "0.17"

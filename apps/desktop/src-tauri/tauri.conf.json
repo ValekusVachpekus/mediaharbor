@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MediaHarbor", "version": "0.1.0", "identifier": "io.mediaharbor.app",
+  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://127.0.0.1:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{ "title": "MediaHarbor", "width": 1240, "height": 850, "minWidth": 900, "minHeight": 640 }],
+    "security": { "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https://i.ytimg.com https://i.scdn.co data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; object-src 'none'" }
+  },
+  "bundle": {
+    "active": true, "targets": ["nsis", "deb", "appimage"],
+    "shortDescription": "Локальная загрузка и сжатие медиа",
+    "category": "Video", "license": "GPL-3.0-or-later",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/256x256.png", "icons/icon.ico"],
+    "resources": { "../../../artifacts/tools/": "tools/" },
+    "externalBin": ["../../../artifacts/media-core"],
+    "linux": { "deb": { "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1", "libdbus-1-3"] } },
+    "windows": { "nsis": { "installerHooks": "windows/hooks.nsh", "installMode": "currentUser" } }
+  }
+}

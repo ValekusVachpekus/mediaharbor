@@ -1,0 +1,41 @@
+# Compile the real processing modules without desktop, HTTP or credential-store
+# dependencies. This is also useful on offline machines with a warmed Cargo cache.
+[workspace]
+
+[package]
+name = "mediaharbor-processing-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "mediaharbor_core"
+path = "lib.rs"
+
+[[bin]]
+name = "offline-core"
+path = "../../crates/core/src/main.rs"
+
+[[test]]
+name = "processing"
+path = "../../crates/core/tests/processing.rs"
+
+[[test]]
+name = "protocol"
+path = "../../crates/core/tests/core.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+rusqlite = { version = "0.41", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+
+[dev-dependencies]
+tempfile = "3"
