@@ -59,56 +59,86 @@ async fn duplicate_creation_is_idempotent_and_request_id_cannot_change_payload()
 #[ignore = "requires OS sockets; run with --include-ignored outside restricted sandboxes"]
 fn native_framing_and_worker_lifecycle_roundtrip() {
     use std::{
-        io::Write,
-        process::{Command, Stdio},
+        process::{Command, Output, Stdio},
+        time::{Duration, Instant},
     };
+    fn run(mut command: Command, dir: &std::path::Path, stage: &str, input: &[u8]) -> Output {
+        eprintln!("IPC lifecycle: {stage}");
+        // Files avoid waiting for pipe EOF from handles inherited by a
+        // long-lived Windows worker. Also bound process exit separately.
+        let stdout = dir.join(format!("{stage}.stdout"));
+        let stderr = dir.join(format!("{stage}.stderr"));
+        let stdin = dir.join(format!("{stage}.stdin"));
+        std::fs::write(&stdin, input).unwrap();
+        let mut child = command
+            .stdin(Stdio::from(std::fs::File::open(stdin).unwrap()))
+            .stdout(Stdio::from(std::fs::File::create(&stdout).unwrap()))
+            .stderr(Stdio::from(std::fs::File::create(&stderr).unwrap()))
+            .spawn()
+            .unwrap();
+        let started = Instant::now();
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if started.elapsed() > Duration::from_secs(30) {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!(
+                    "IPC lifecycle stage {stage} timed out. stderr: {}\nworker.log: {}",
+                    std::fs::read_to_string(&stderr).unwrap_or_default(),
+                    std::fs::read_to_string(dir.join("worker.log")).unwrap_or_default(),
+                );
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        };
+        let output = Output {
+            status,
+            stdout: std::fs::read(stdout).unwrap(),
+            stderr: std::fs::read(stderr).unwrap(),
+        };
+        assert!(
+            output.status.success(),
+            "IPC lifecycle stage {stage}: {}\nworker.log: {}",
+            String::from_utf8_lossy(&output.stderr),
+            std::fs::read_to_string(dir.join("worker.log")).unwrap_or_default(),
+        );
+        output
+    }
     let binary = option_env!("CARGO_BIN_EXE_offline-core")
         .or(option_env!("CARGO_BIN_EXE_media-core"))
         .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let ping = request("ping", json!(null));
-    let result = Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(["--request", &serde_json::to_string(&ping).unwrap()])
-        .env("MEDIAHARBOR_DATA_DIR", dir.path())
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
+        .env("MEDIAHARBOR_DATA_DIR", dir.path());
+    let result = run(command, dir.path(), "startup-ping", &[]);
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&result.stdout).unwrap()["data"]["name"],
         "MediaHarbor"
     );
-    let mut child = Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .arg("--native-host")
-        .env("MEDIAHARBOR_DATA_DIR", dir.path())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
+        .env("MEDIAHARBOR_DATA_DIR", dir.path());
     let bytes = serde_json::to_vec(&request("jobs.list", json!({"offset":0}))).unwrap();
-    let mut stdin = child.stdin.take().unwrap();
-    stdin
-        .write_all(&(bytes.len() as u32).to_le_bytes())
-        .unwrap();
-    stdin.write_all(&bytes).unwrap();
-    drop(stdin);
-    let result = child.wait_with_output().unwrap();
-    assert!(result.status.success());
+    let mut input = (bytes.len() as u32).to_le_bytes().to_vec();
+    input.extend_from_slice(&bytes);
+    let result = run(command, dir.path(), "native-frame", &input);
+    assert!(result.stdout.len() >= 4, "Missing native response frame");
     let count = u32::from_le_bytes(result.stdout[..4].try_into().unwrap()) as usize;
     assert_eq!(count, result.stdout.len() - 4);
     let response: serde_json::Value = serde_json::from_slice(&result.stdout[4..]).unwrap();
     assert_eq!(response["ok"], true);
     assert_eq!(response["data"]["total"], 0);
-    let result = Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args([
             "--request",
             &serde_json::to_string(&request("worker.shutdown", json!(null))).unwrap(),
         ])
-        .env("MEDIAHARBOR_DATA_DIR", dir.path())
-        .output()
-        .unwrap();
-    assert!(result.status.success());
+        .env("MEDIAHARBOR_DATA_DIR", dir.path());
+    run(command, dir.path(), "shutdown", &[]);
 }

@@ -193,15 +193,31 @@ pub async fn ensure_worker(executable: &Path, tools: Option<&Path>) -> Result<()
         op: "ping".into(),
         payload: Value::Null,
     };
-    if send(ping()).await.is_ok() {
+    // A normal request may take 180s. A readiness probe must not use that
+    // budget on every retry (100 retries could otherwise take five hours).
+    let ready = || async {
+        matches!(
+            tokio::time::timeout(std::time::Duration::from_millis(500), send(ping())).await,
+            Ok(Ok(response)) if response["ok"] == true
+        )
+    };
+    if ready().await {
         return Ok(());
     }
     spawn_worker(executable, tools)?;
-    for _ in 0..100 {
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        if send(ping()).await.is_ok() {
-            return Ok(());
+    let startup = async {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            if ready().await {
+                return;
+            }
         }
+    };
+    if tokio::time::timeout(std::time::Duration::from_secs(10), startup)
+        .await
+        .is_ok()
+    {
+        return Ok(());
     }
     anyhow::bail!(
         "Фоновое ядро не отвечает. Подробности: {}",

@@ -180,7 +180,7 @@ def build(args):
     run(['npm', 'run', 'test:extension'])
     # Reuse release dependencies for tests, the sidecar and the Tauri app,
     # instead of compiling the core dependency graph in both debug and release.
-    run(['cargo', 'test', '--locked', '--release', '-p', 'mediaharbor-core', '--', '--include-ignored'])
+    run(['cargo', 'test', '--locked', '--release', '-p', 'mediaharbor-core', '--', '--include-ignored', '--nocapture'])
     run([sys.executable, 'scripts/prepare-sidecar.py'])
     # Remove stale installers so that a failed/empty build cannot reuse an old
     # artifact and be reported as a successful installer build.
