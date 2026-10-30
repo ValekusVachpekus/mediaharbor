@@ -14,6 +14,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -64,7 +65,16 @@ def run(args):
     if tools.is_dir():
         build_env['MEDIAHARBOR_TOOLS_DIR'] = str(tools)
         build_env['PATH'] = str(tools) + os.pathsep + build_env.get('PATH', '')
-    subprocess.run(command, cwd=ROOT, check=True, env=build_env)
+    grouped = os.environ.get('GITHUB_ACTIONS') == 'true'
+    if grouped:
+        print('::group::' + ' '.join(map(str, args)), flush=True)
+    started = time.monotonic()
+    try:
+        subprocess.run(command, cwd=ROOT, check=True, env=build_env)
+    finally:
+        print(f'Время команды: {time.monotonic() - started:.1f} с', flush=True)
+        if grouped:
+            print('::endgroup::', flush=True)
 
 
 def check_environment(require_network=True):
@@ -168,7 +178,9 @@ def build(args):
     run(['npm', 'run', 'test:dom'])
     run(['npm', 'run', 'extension:portable'])
     run(['npm', 'run', 'test:extension'])
-    run(['cargo', 'test', '--locked', '-p', 'mediaharbor-core', '--', '--include-ignored'])
+    # Reuse release dependencies for tests, the sidecar and the Tauri app,
+    # instead of compiling the core dependency graph in both debug and release.
+    run(['cargo', 'test', '--locked', '--release', '-p', 'mediaharbor-core', '--', '--include-ignored'])
     run([sys.executable, 'scripts/prepare-sidecar.py'])
     # Remove stale installers so that a failed/empty build cannot reuse an old
     # artifact and be reported as a successful installer build.

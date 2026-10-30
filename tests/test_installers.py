@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import io
 import os
 from pathlib import Path
 import socket
@@ -17,6 +18,22 @@ SPEC.loader.exec_module(BUILD)
 
 
 class InstallerTests(unittest.TestCase):
+    def test_command_timing_closes_log_group_and_preserves_failure(self):
+        for failure in (None, subprocess.CalledProcessError(2, 'test-command')):
+            with self.subTest(failure=failure), \
+                    patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}), \
+                    patch.object(BUILD.subprocess, 'run', side_effect=failure), \
+                    patch.object(BUILD.time, 'monotonic', side_effect=[10.0, 12.5]), \
+                    patch.object(BUILD.sys, 'stdout', new_callable=io.StringIO) as output:
+                if failure is None:
+                    BUILD.run(['test-command'])
+                else:
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        BUILD.run(['test-command'])
+                self.assertIn('::group::test-command', output.getvalue())
+                self.assertIn('Время команды: 2.5 с', output.getvalue())
+                self.assertTrue(output.getvalue().endswith('::endgroup::\n'))
+
     def test_cyrillic_output_with_redirected_windows_encoding(self):
         # Exercise the entrypoint in a fresh interpreter whose redirected
         # streams initially use cp1252, as on the failing Windows runner.

@@ -1,10 +1,54 @@
 name: Check and build
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    paths:
+      - 'apps/**'
+      - 'crates/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'tools/**'
+      - '.cargo/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools.lock.json'
+      - 'tsconfig.json'
+      - 'rust-toolchain*'
+      - '.node-version'
+      - '.nvmrc'
+      - '!**/*.md'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'crates/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'tools/**'
+      - '.cargo/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools.lock.json'
+      - 'tsconfig.json'
+      - 'rust-toolchain*'
+      - '.node-version'
+      - '.nvmrc'
+      - '!**/*.md'
+  workflow_dispatch:
 permissions:
   contents: read
 env:
   PYTHONUTF8: '1'
   PYTHONIOENCODING: utf-8
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 jobs:
   check:
     strategy:
@@ -25,6 +69,10 @@ jobs:
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: checks-debug-v2
+          cache-workspace-crates: 'true'
+          cache-on-failure: 'true'
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev ffmpeg
       - run: npm ci

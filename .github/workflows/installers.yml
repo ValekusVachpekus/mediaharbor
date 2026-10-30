@@ -4,11 +4,36 @@ on:
   push:
     branches: [main, master]
     tags: ['v*']
+    paths:
+      - 'apps/**'
+      - 'crates/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'tools/**'
+      - '.cargo/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools.lock.json'
+      - 'tsconfig.json'
+      - 'rust-toolchain*'
+      - '.node-version'
+      - '.nvmrc'
+      - '!**/*.md'
 permissions:
   contents: read
 env:
   PYTHONUTF8: '1'
   PYTHONIOENCODING: utf-8
+  # Avoid the expensive fat-LTO/single-codegen-unit release profile in CI.
+  CARGO_PROFILE_RELEASE_LTO: thin
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 jobs:
   installers:
     name: Build ${{ matrix.platform }}
@@ -32,6 +57,10 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: installers-release-v2
+          cache-workspace-crates: 'true'
+          cache-on-failure: 'true'
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev patchelf libfuse2t64 ffmpeg
@@ -47,3 +76,51 @@ jobs:
           path: artifacts/installers/${{ matrix.platform }}/
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs: installers
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mediaharbor-*-unsigned
+          path: release-input
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Package release archives
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          import shutil
+
+          output = Path('release-assets')
+          output.mkdir()
+          archives = []
+          for platform in ('linux-x64', 'windows-x64'):
+              name = f'mediaharbor-{platform}-unsigned'
+              source = Path('release-input') / name
+              if not source.is_dir() or not any(source.iterdir()):
+                  raise RuntimeError(f'Missing installer artifact: {name}')
+              archive = Path(shutil.make_archive(str(output / name), 'zip', source))
+              archives.append(archive)
+          (output / 'SHA256SUMS.txt').write_text(''.join(
+              f'{hashlib.file_digest(path.open("rb"), "sha256").hexdigest()}  {path.name}\n'
+              for path in archives), encoding='utf-8')
+          PY
+      - name: Upload and publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes --title "MediaHarbor $RELEASE_TAG"
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false
