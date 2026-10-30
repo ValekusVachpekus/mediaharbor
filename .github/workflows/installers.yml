@@ -6,6 +6,9 @@ on:
     tags: ['v*']
 permissions:
   contents: read
+env:
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: utf-8
 jobs:
   installers:
     name: Build ${{ matrix.platform }}

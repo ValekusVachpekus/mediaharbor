@@ -206,6 +206,14 @@ def build(args):
 
 
 def main():
+    # Windows CI redirects stdout/stderr through an ANSI code page. Build
+    # messages and paths may contain Cyrillic; use UTF-8 for this process and
+    # every Python helper launched below, including when invoked without -X utf8.
+    os.environ['PYTHONUTF8'] = '1'
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='backslashreplace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Проверить зависимости и DNS без запуска сборки')
     parser.add_argument('--skip-install', action='store_true', help='Не запускать npm install/ci')
